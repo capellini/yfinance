@@ -247,14 +247,22 @@ class TickerBase():
 
     # ------------------------
 
+    def _drop_max_age(self, df):
+        if 'maxAge' in df:
+            return df.drop(columns=['maxAge'])
+
+        return df
+
     def _get_fundamentals(self, kind=None, proxy=None):
         def cleanup(data):
-            df = _pd.DataFrame(data).drop(columns=['maxAge'])
+            df = self._drop_max_age(_pd.DataFrame(data))
             for col in df.columns:
                 df[col] = _np.where(
                     df[col].astype(str) == '-', _np.nan, df[col])
 
-            df.set_index('endDate', inplace=True)
+            if 'endDate' in df:
+                df.set_index('endDate', inplace=True)
+
             try:
                 df.index = _pd.to_datetime(df.index, unit='s')
             except ValueError:
@@ -276,11 +284,11 @@ class TickerBase():
             return
 
         # get info and sustainability
-        url = '%s/%s' % (self._scrape_url, self.ticker)
+        url = '%s/%s?p=%s' % (self._scrape_url, self.ticker, self.ticker)
         data = utils.get_json(url, proxy)
 
         # holders
-        url = "{}/{}/holders".format(self._scrape_url, self.ticker)
+        url = "{}/{}".format(self._scrape_url, self.ticker)
         holders = _pd.read_html(url)
         self._major_holders = holders[0]
         self._institutional_holders = holders[1]
@@ -300,9 +308,14 @@ class TickerBase():
 
             s = _pd.DataFrame(index=[0], data=d)[-1:].T
             s.columns = ['Value']
-            s.index.name = '%.f-%.f' % (
-                s[s.index == 'ratingYear']['Value'].values[0],
-                s[s.index == 'ratingMonth']['Value'].values[0])
+
+            if(len(s[s.index == 'ratingYear']['Value'].values) > 0 and
+               len(s[s.index == 'ratingMonth']['Value'].values) > 0 ):
+                s.index.name = '%.f-%.f' % (
+                    s[s.index == 'ratingYear']['Value'].values[0],
+                    s[s.index == 'ratingMonth']['Value'].values[0])
+            else:
+                s.index.name = '%.f-%.f' % (0, 0)
 
             self._sustainability = s[~s.index.isin(
                 ['maxAge', 'ratingYear', 'ratingMonth'])]
@@ -315,7 +328,8 @@ class TickerBase():
             if isinstance(data.get(item), dict):
                 self._info.update(data[item])
 
-        self._info['regularMarketPrice'] = self._info['regularMarketOpen']
+        self._info['regularMarketPrice'] = self._info['regularMarketOpen']\
+            if 'regularMarketOpen' in self._info else ""
         self._info['logo_url'] = ""
         try:
             domain = self._info['website'].split(
@@ -351,7 +365,7 @@ class TickerBase():
             pass
 
         # get fundamentals
-        data = utils.get_json(url+'/financials', proxy)
+        data = utils.get_json('{}/financials?p={}'.format(url, self.ticker), proxy)
 
         # generic patterns
         for key in (
@@ -359,27 +373,32 @@ class TickerBase():
             (self._balancesheet, 'balanceSheet', 'balanceSheetStatements'),
             (self._financials, 'incomeStatement', 'incomeStatementHistory')
         ):
+            try:
+                item = key[1] + 'History'
+                if isinstance(data.get(item), dict):
+                    key[0]['yearly'] = cleanup(data[item][key[2]])
 
-            item = key[1] + 'History'
-            if isinstance(data.get(item), dict):
-                key[0]['yearly'] = cleanup(data[item][key[2]])
-
-            item = key[1]+'HistoryQuarterly'
-            if isinstance(data.get(item), dict):
-                key[0]['quarterly'] = cleanup(data[item][key[2]])
+                item = key[1]+'HistoryQuarterly'
+                if isinstance(data.get(item), dict):
+                    key[0]['quarterly'] = cleanup(data[item][key[2]])
+            except KeyError:
+                pass
 
         # earnings
-        if isinstance(data.get('earnings'), dict):
-            earnings = data['earnings']['financialsChart']
-            df = _pd.DataFrame(earnings['yearly']).set_index('date')
-            df.columns = utils.camel2title(df.columns)
-            df.index.name = 'Year'
-            self._earnings['yearly'] = df
+        try:
+            if isinstance(data.get('earnings'), dict):
+                earnings = data['earnings']['financialsChart']
+                df = _pd.DataFrame(earnings['yearly']).set_index('date')
+                df.columns = utils.camel2title(df.columns)
+                df.index.name = 'Year'
+                self._earnings['yearly'] = df
 
-            df = _pd.DataFrame(earnings['quarterly']).set_index('date')
-            df.columns = utils.camel2title(df.columns)
-            df.index.name = 'Quarter'
-            self._earnings['quarterly'] = df
+                df = _pd.DataFrame(earnings['quarterly']).set_index('date')
+                df.columns = utils.camel2title(df.columns)
+                df.index.name = 'Quarter'
+                self._earnings['quarterly'] = df
+        except KeyError:
+            pass
 
         self._fundamentals = True
 
