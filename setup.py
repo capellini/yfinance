@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-# -*- coding: UTF-8 -*-
+# -*- coding: utf-8 -*-
 #
 # Yahoo! Finance market data downloader (+fix for Pandas Datareader)
-# https://github.com/ranaroussi/yfinance
+# https://github.com/capellini/yfinance
 
 """Yahoo! Finance market data downloader (+fix for Pandas Datareader)"""
 
@@ -18,11 +18,11 @@ with io.open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='yfinance',
+    name='yfinancecapellini',
     version="0.1.54",
     description='Yahoo! Finance market data downloader',
     long_description=long_description,
-    url='https://github.com/ranaroussi/yfinance',
+    url='https://github.com/capellini/yfinance',
     author='Ran Aroussi',
     author_email='ran@aroussi.com',
     license='Apache',
